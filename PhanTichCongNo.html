@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phân tích công nợ</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  color-scheme:light;
+  --page:#f9f9f7; --surface:#fcfcfb; --surface-2:#f2f1ed;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
+  --accent:#2a78d6; --accent-ink:#fff;
+  --b250:#86b6ef; --b350:#5598e7; --b450:#2a78d6; --b550:#1c5cab;
+  --good:#0ca30c; --good-ink:#006300; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b; --severe:#8e1d1d;
+  --nodue:#a9a79f;
+  --warn-bg:#fff6e0; --crit-bg:#fdecec; --good-bg:#eaf6ea; --soon-bg:#e8f0fb;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --page:#0d0d0d; --surface:#1a1a19; --surface-2:#232321;
+    --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+    --accent:#3987e5;
+    --b250:#184f95; --b350:#256abf; --b450:#3987e5; --b550:#6da7ec;
+    --good-ink:#0ca30c; --severe:#e66767; --nodue:#6b6a65;
+    --warn-bg:#3a2e10; --crit-bg:#3d1a1a; --good-bg:#16301a; --soon-bg:#17263a;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --page:#0d0d0d; --surface:#1a1a19; --surface-2:#232321;
+  --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+  --accent:#3987e5;
+  --b250:#184f95; --b350:#256abf; --b450:#3987e5; --b550:#6da7ec;
+  --good-ink:#0ca30c; --severe:#e66767; --nodue:#6b6a65;
+  --warn-bg:#3a2e10; --crit-bg:#3d1a1a; --good-bg:#16301a; --soon-bg:#17263a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1280px;margin:0 auto;padding:20px 16px 48px}
+header.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between;margin-bottom:16px}
+h1{font-size:20px;margin:0}
+h2{font-size:16px;margin:0 0 12px}
+.sub{color:var(--ink-2);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
+.btn{appearance:none;border:1px solid var(--border);background:var(--surface);color:var(--ink);padding:7px 12px;border-radius:8px;font:inherit;cursor:pointer}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.primary:hover{filter:brightness(1.08)}
+input[type=date],input[type=number],input[type=search],select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 8px}
+#drop{border:2px dashed var(--axis);border-radius:12px;padding:40px 16px;text-align:center;cursor:pointer;background:var(--surface)}
+#drop.over{border-color:var(--accent);background:var(--soon-bg)}
+#drop b{font-size:16px}
+.controls{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;margin:12px 0 16px}
+.controls label{display:flex;align-items:center;gap:6px;color:var(--ink-2);font-size:13px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--grid);margin-bottom:16px;overflow-x:auto}
+.tab{border:0;background:none;color:var(--ink-2);padding:10px 14px;font:inherit;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.active{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.tab .cnt{display:inline-block;min-width:20px;padding:0 6px;border-radius:10px;background:var(--critical);color:#fff;font-size:11px;margin-left:4px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px}
+.kpi .lbl{color:var(--ink-2);font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+.kpi .val{font-size:24px;font-weight:650;margin:4px 0 2px}
+.kpi .note{color:var(--muted);font-size:12px}
+.kpi.alert{border-left:4px solid var(--critical)}
+.kpi.soon{border-left:4px solid var(--warning)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media (max-width:860px){.grid2{grid-template-columns:1fr}}
+.insights{margin:0;padding-left:18px}
+.insights li{margin:4px 0}
+/* horizontal bars */
+.hbar{display:grid;grid-template-columns:150px 1fr 120px;gap:8px;align-items:center;margin:6px 0;font-size:13px}
+.hbar .name{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hbar .track{height:18px;display:flex;gap:2px}
+.hbar .seg{height:100%;border-radius:0 4px 4px 0}
+.hbar .track .seg:not(:last-child){border-radius:0}
+.hbar .num{text-align:right;font-variant-numeric:tabular-nums}
+.hbar .num small{color:var(--muted)}
+@media (max-width:560px){.hbar{grid-template-columns:100px 1fr 90px}}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin-bottom:8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+/* vertical bars */
+.vchart{display:flex;align-items:flex-end;gap:6px;height:240px;border-bottom:1px solid var(--axis);padding-top:22px;position:relative}
+.vcol{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0;cursor:default}
+.vcol .bar{width:70%;max-width:46px;border-radius:4px 4px 0 0;min-height:1px}
+.vcol .v{font-size:11px;color:var(--ink-2);margin-bottom:3px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.vlabels{display:flex;gap:6px;margin-top:6px}
+.vlabels div{flex:1;text-align:center;font-size:11px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vcol:hover .bar{filter:brightness(1.1)}
+/* tables */
+.tblwrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--grid);text-align:left;vertical-align:top}
+th{background:var(--surface-2);color:var(--ink-2);font-weight:600;position:sticky;top:0;white-space:nowrap}
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover{color:var(--ink)}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.clk{cursor:pointer}
+tr.clk:hover td{background:var(--surface-2)}
+tr.sub td{background:var(--page);padding:8px 10px 14px 28px}
+tr.sub table{font-size:12px}
+tfoot td{font-weight:650;background:var(--surface-2)}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:12px;white-space:nowrap;border:1px solid transparent}
+.badge::before{font-size:11px}
+.lv-crit{background:var(--crit-bg);color:var(--critical);border-color:var(--critical)}
+.lv-crit::before{content:"⛔"}
+.lv-high{background:var(--crit-bg);color:var(--critical)}
+.lv-high::before{content:"▲"}
+.lv-med{background:var(--warn-bg);color:var(--ink)}
+.lv-med::before{content:"▲";color:var(--serious)}
+.lv-low{background:var(--warn-bg);color:var(--ink)}
+.lv-low::before{content:"●";color:var(--warning)}
+.lv-soon{background:var(--soon-bg);color:var(--ink)}
+.lv-soon::before{content:"⏰"}
+.lv-ok{background:var(--good-bg);color:var(--good-ink)}
+.lv-ok::before{content:"✓"}
+.lv-paid{background:var(--surface-2);color:var(--ink-2)}
+.lv-paid::before{content:"✓"}
+.lv-nodue{background:var(--surface-2);color:var(--ink-2)}
+.lv-nodue::before{content:"?"}
+.lv-credit{background:var(--surface-2);color:var(--ink-2)}
+.red{color:var(--critical);font-weight:600}
+.muted{color:var(--muted)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.alertcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:16px}
+.acard{border-left:4px solid var(--warning)}
+.acard.crit{border-left-color:var(--severe)}
+.acard.high{border-left-color:var(--critical)}
+.acard.med{border-left-color:var(--serious)}
+.acard h3{font-size:14px;margin:6px 0 4px}
+.acard .big{font-size:20px;font-weight:650;color:var(--critical)}
+.acard dl{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:8px 0;font-size:12px}
+.acard dt{color:var(--muted)}
+.acard dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.acard .act{font-size:12px;background:var(--surface-2);padding:6px 8px;border-radius:6px}
+#tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--surface);padding:6px 9px;border-radius:6px;font-size:12px;z-index:50;display:none;max-width:320px;white-space:pre-line;box-shadow:0 4px 14px rgba(0,0,0,.2)}
+.hidden{display:none!important}
+.err{background:var(--crit-bg);color:var(--critical);padding:10px 12px;border-radius:8px;margin-top:12px}
+.foot{margin-top:24px;color:var(--muted);font-size:12px}
+@media print{.noprint{display:none!important} .tabpane{display:block!important;page-break-before:always} body{background:#fff}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Phân tích công nợ phải thu</h1>
+      <div class="sub" id="fileinfo">Tải file “Chi tiết công nợ phải thu theo hóa đơn” (xuất từ phần mềm kế toán) để bắt đầu.</div>
+    </div>
+    <div class="noprint" style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn hidden" id="btnNew">Tải file khác</button>
+      <button class="btn hidden" id="btnExport">Xuất Excel báo cáo</button>
+      <button class="btn hidden" id="btnPrint">In</button>
+    </div>
+  </header>
+
+  <section id="upload">
+    <div id="drop" tabindex="0">
+      <b>Kéo thả file Excel vào đây</b><br>
+      <span class="sub">hoặc bấm để chọn file (.xlsx, .xls, .csv)</span><br><br>
+      <span class="sub">Cần các cột: Tên/Mã khách hàng, Số hóa đơn, <b>Hạn thanh toán</b>, Giá trị hóa đơn, Số đã thu, Số còn phải thu.<br>
+      Hỗ trợ cả dạng có cột “Mã khách hàng” và dạng nhóm theo dòng “Tên khách hàng: …”.</span>
+    </div>
+    <input type="file" id="file" accept=".xlsx,.xls,.xlsm,.csv" class="hidden">
+    <div id="err" class="err hidden"></div>
+  </section>
+
+  <section id="app" class="hidden">
+    <div class="controls noprint">
+      <label>Ngày đánh giá <input type="date" id="refDate"></label>
+      <button class="btn" id="btnToday">Hôm nay</button>
+      <button class="btn hidden" id="btnPeriodEnd"></button>
+      <label>Cảnh báo sắp đến hạn trong <input type="number" id="soonDays" min="1" max="90" value="7" style="width:64px"> ngày</label>
+    </div>
+
+    <nav class="tabs noprint" id="tabs">
+      <button class="tab active" data-tab="overview">Tổng quan</button>
+      <button class="tab" data-tab="alerts">Cảnh báo quá hạn <span class="cnt" id="alertCnt">0</span></button>
+      <button class="tab" data-tab="forecast">Dự kiến thu</button>
+      <button class="tab" data-tab="customers">Theo khách hàng</button>
+      <button class="tab" data-tab="invoices">Chi tiết hóa đơn</button>
+    </nav>
+
+    <div class="tabpane" id="pane-overview">
+      <div class="kpis" id="kpis"></div>
+      <div class="grid2">
+        <div class="card"><h2>Tuổi nợ – cơ cấu số còn phải thu</h2><div id="agingChart"></div></div>
+        <div class="card"><h2>Nhận định nhanh</h2><ul class="insights" id="insights"></ul></div>
+      </div>
+      <div class="card"><h2>Top 10 khách hàng theo dư nợ</h2>
+        <div class="legend"><span><i style="background:var(--critical)"></i>Quá hạn</span><span><i style="background:var(--b450)"></i>Trong hạn</span><span><i style="background:var(--nodue)"></i>Chưa có hạn TT</span></div>
+        <div id="topChart"></div>
+      </div>
+    </div>
+
+    <div class="tabpane hidden" id="pane-alerts">
+      <div id="alertSummary" class="sub" style="margin-bottom:12px"></div>
+      <div class="alertcards" id="alertCards"></div>
+      <div class="card" style="margin-bottom:16px"><h2 id="soonTitle">Sắp đến hạn</h2><div id="soonTbl"></div></div>
+      <div class="card"><h2>Hóa đơn chưa có hạn thanh toán</h2><div id="nodueTbl"></div></div>
+    </div>
+
+    <div class="tabpane hidden" id="pane-forecast">
+      <div class="card" style="margin-bottom:16px">
+        <div class="filters noprint">
+          <h2 style="margin:0 12px 0 0">Dòng tiền dự kiến thu theo hạn thanh toán</h2>
+          <select id="fcMode"><option value="week">Theo tuần (12 tuần)</option><option value="month">Theo tháng (6 tháng)</option></select>
+        </div>
+        <div class="legend"><span><i style="background:var(--critical)"></i>Đã quá hạn – cần đôn đốc thu ngay</span><span><i style="background:var(--b450)"></i>Đến hạn trong kỳ</span><span><i style="background:var(--nodue)"></i>Chưa có hạn TT</span></div>
+        <div id="fcChart"></div>
+        <p class="sub" style="margin:10px 0 0">Giả định: khách hàng thanh toán đúng hạn ghi trên hóa đơn. Bấm vào từng kỳ trong bảng dưới để xem khách hàng / hóa đơn dự kiến thu.</p>
+      </div>
+      <div id="fcTbl"></div>
+    </div>
+
+    <div class="tabpane hidden" id="pane-customers">
+      <div class="filters noprint">
+        <input type="search" id="custSearch" placeholder="Tìm mã / tên khách hàng…" style="min-width:240px">
+        <select id="custFilter">
+          <option value="debt">Còn nợ</option>
+          <option value="overdue">Có nợ quá hạn</option>
+          <option value="soon">Sắp đến hạn</option>
+          <option value="all">Tất cả khách hàng</option>
+        </select>
+        <span class="sub">Bấm vào dòng để xem hóa đơn của khách hàng.</span>
+      </div>
+      <div class="tblwrap" id="custTbl"></div>
+    </div>
+
+    <div class="tabpane hidden" id="pane-invoices">
+      <div class="filters noprint">
+        <input type="search" id="invSearch" placeholder="Tìm khách hàng / số HĐ…" style="min-width:240px">
+        <select id="invFilter">
+          <option value="open">Còn phải thu</option>
+          <option value="overdue">Quá hạn</option>
+          <option value="soon">Sắp đến hạn</option>
+          <option value="notdue">Trong hạn</option>
+          <option value="nodue">Chưa có hạn TT</option>
+          <option value="paid">Đã thu đủ</option>
+          <option value="all">Tất cả</option>
+        </select>
+      </div>
+      <div class="tblwrap" id="invTbl"></div>
+    </div>
+    <p class="foot">Dữ liệu được xử lý ngay trên trình duyệt của bạn, không gửi đi đâu.</p>
+  </section>
+</div>
+<div id="tip"></div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').toLowerCase().replace(/\s+/g,' ').trim();
+const fmt = n => Math.round(n || 0).toLocaleString('vi-VN');
+function fmtC(n){ // compact
+  const a = Math.abs(n || 0);
+  if (a >= 1e9) return (n/1e9).toLocaleString('vi-VN',{maximumFractionDigits:2}) + ' tỷ';
+  if (a >= 1e6) return (n/1e6).toLocaleString('vi-VN',{maximumFractionDigits:1}) + ' tr';
+  if (a >= 1e3) return (n/1e3).toLocaleString('vi-VN',{maximumFractionDigits:0}) + ' k';
+  return fmt(n);
+}
+const pct = (a,b) => b ? (a/b*100).toLocaleString('vi-VN',{maximumFractionDigits:1}) + '%' : '–';
+const DAY = 864e5;
+const dayOf = d => Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY);
+function dstr(day){ if (day == null) return ''; const d = new Date(day*DAY); return String(d.getUTCDate()).padStart(2,'0')+'/'+String(d.getUTCMonth()+1).padStart(2,'0')+'/'+d.getUTCFullYear(); }
+function dshort(day){ const d = new Date(day*DAY); return String(d.getUTCDate()).padStart(2,'0')+'/'+String(d.getUTCMonth()+1).padStart(2,'0'); }
+const isoOf = day => new Date(day*DAY).toISOString().slice(0,10);
+
+function parseNum(v){
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return v;
+  let s = String(v).trim(); let neg = false;
+  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1,-1); }
+  s = s.replace(/\s/g,'');
+  if (/^-?[\d.]+,\d+$/.test(s)) s = s.replace(/\./g,'').replace(',','.');      // 1.234,5
+  else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g,'');           // 1.234.567
+  else s = s.replace(/,/g,'');                                                 // 1,234,567
+  const n = parseFloat(s); return isNaN(n) ? 0 : (neg ? -n : n);
+}
+function parseDay(v){
+  if (v == null || v === '') return null;
+  if (v instanceof Date) return dayOf(v);
+  if (typeof v === 'number') return (v > 20000 && v < 80000) ? Math.floor(v) - 25569 : null;
+  const s = String(v).trim();
+  let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+  if (m) { let y = +m[3]; if (y < 100) y += 2000; return Math.floor(Date.UTC(y, +m[2]-1, +m[1]) / DAY); }
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return Math.floor(Date.UTC(+m[1], +m[2]-1, +m[3]) / DAY);
+  if (/^\d{5}(\.\d+)?$/.test(s)) return parseDay(+s);
+  return null;
+}
+
+/* ---------- column detection ---------- */
+const COLS = {
+  code:   h => h.includes('ma khach') || h === 'ma kh' || h.includes('ma doi tuong'),
+  name:   h => h.includes('ten khach') || h === 'ten kh' || h.includes('ten doi tuong') || h === 'khach hang',
+  date:   h => h.includes('ngay hach toan') || h.includes('ngay chung tu') || h === 'ngay ct',
+  doc:    h => h.includes('so chung tu') || h === 'so ct',
+  inv:    h => h.includes('so hoa don') || h === 'so hd',
+  invDate:h => h.includes('ngay hoa don') || h === 'ngay hd',
+  desc:   h => h.includes('dien giai'),
+  due:    h => h.includes('han thanh toan') || h.includes('han tt') || h.includes('ngay den han') || h.includes('han no'),
+  open:   h => h.includes('phai thu dk') || h.includes('dau ky'),
+  value:  h => h.includes('gia tri hoa don') || h.includes('gia tri hd') || h.includes('so tien hoa don') || h.includes('phat sinh'),
+  paid:   h => h.includes('da thu') || h.includes('da thanh toan'),
+  remain: h => (h.includes('con phai thu') || h.includes('con lai') || h.includes('so du')) && !h.includes(' dk') && !h.includes('dau ky'),
+};
+function detect(rows){
+  let best = null;
+  for (let r = 0; r < Math.min(rows.length, 40); r++){
+    const row = rows[r] || []; const map = {}; let score = 0;
+    row.forEach((c, i) => {
+      const h = norm(c); if (!h || h.length > 60) return;
+      for (const k in COLS) if (map[k] == null && COLS[k](h)) { map[k] = i; score++; break; }
+    });
+    if (map.due != null && (map.remain != null || map.value != null) && (!best || score > best.score)) best = {r, map, score};
+  }
+  return best;
+}
+function detectPeriod(rows, upto){
+  const txt = rows.slice(0, upto).flat().map(c => String(c ?? '')).join(' ');
+  const n = norm(txt);
+  let m = n.match(/den ngay (\d{1,2}\/\d{1,2}\/\d{4})/); if (m) return {end: parseDay(m[1]), label: txt.match(/Từ ngày[^|]*|Tháng[^|]*/i)?.[0]?.trim()};
+  m = n.match(/thang (\d{1,2}) nam (\d{4})/);
+  if (m) return {end: Math.floor(Date.UTC(+m[2], +m[1], 0) / DAY), label: 'Tháng ' + m[1] + '/' + m[2]};
+  m = n.match(/quy (\d) nam (\d{4})/);
+  if (m) return {end: Math.floor(Date.UTC(+m[2], (+m[1])*3, 0) / DAY), label: 'Quý ' + m[1] + '/' + m[2]};
+  m = n.match(/nam (\d{4})/);
+  if (m) return {end: Math.floor(Date.UTC(+m[1], 12, 0) / DAY), label: 'Năm ' + m[1]};
+  return null;
+}
+
+function parseWorkbook(wb){
+  let pick = null;
+  for (const sn of wb.SheetNames){
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {header:1, raw:true, defval:''});
+    const d = detect(rows);
+    if (d && (!pick || d.score > pick.d.score)) pick = {sn, rows, d};
+  }
+  if (!pick) throw new Error('Không tìm thấy dòng tiêu đề có cột “Hạn thanh toán” và “Số còn phải thu / Giá trị hóa đơn”. Vui lòng kiểm tra lại file.');
+  const {rows, d} = pick, M = d.map, inv = [];
+  const get = (row, k) => M[k] == null ? '' : row[M[k]];
+  let grpName = '', grpCode = '';
+  for (let r = d.r + 1; r < rows.length; r++){
+    const row = rows[r]; if (!row) continue;
+    const cells = row.filter(c => c !== '' && c != null);
+    if (!cells.length) continue;
+    const first = norm(cells[0]);
+    // group header rows: "Tên khách hàng: ...", "Mã khách hàng: ..."
+    const g = String(cells[0]).match(/^\s*(Tên|Mã)\s*(khách hàng|KH|đối tượng)\s*:\s*(.+)$/i);
+    if (g){
+      const v = g[3].trim();
+      if (/^m/i.test(g[1])) { const p = v.split(/\s+-\s+/); grpCode = p[0]; if (p[1]) grpName = p.slice(1).join(' - '); }
+      else { grpName = v; grpCode = ''; }
+      continue;
+    }
+    if (/^(tong cong|cong|tong)\b/.test(first)) continue;
+    if (cells.length > 3 && cells.every(c => String(c).trim().length <= 3)) continue; // dòng đánh số cột A, B, 1, 2…
+    const value = parseNum(get(row,'value')), paid = parseNum(get(row,'paid'));
+    let remain = M.remain != null ? parseNum(get(row,'remain')) : value - paid;
+    const opening = parseNum(get(row,'open'));
+    if (!value && !paid && !remain && !opening) continue;
+    const name = String(get(row,'name') || grpName || '').trim();
+    const code = String(get(row,'code') || grpCode || '').trim();
+    if (!name && !code) continue;
+    inv.push({
+      code: code || name, name: name || code,
+      date: parseDay(get(row,'date')) ?? parseDay(get(row,'invDate')),
+      doc: String(get(row,'doc') || ''), inv: String(get(row,'inv') || ''),
+      desc: String(get(row,'desc') || ''),
+      due: parseDay(get(row,'due')),
+      opening, value, paid, remain
+    });
+  }
+  if (!inv.length) throw new Error('Đã nhận diện được tiêu đề nhưng không đọc được dòng hóa đơn nào.');
+  return {invoices: inv, sheet: pick.sn, period: detectPeriod(rows, d.r), title: String(rows[0]?.find(c => c) || '')};
+}
+
+/* ---------- analysis ---------- */
+const S = {data:null, ref:dayOf(new Date()), soon:7, fcMode:'week', custSort:{k:'remain',dir:-1}, invSort:{k:'over',dir:-1}, open:new Set()};
+const LV = {
+  crit:{t:'Nghiêm trọng (>90 ngày)', r:6, act:'Tạm ngừng bán chịu, gửi công văn đòi nợ chính thức; cân nhắc trích lập dự phòng / biện pháp pháp lý.'},
+  high:{t:'Cao (61–90 ngày)', r:5, act:'Gọi điện + gửi công văn nhắc nợ, yêu cầu lịch trả nợ cụ thể; hạn chế giao hàng mới.'},
+  med: {t:'Trung bình (31–60 ngày)', r:4, act:'Liên hệ trực tiếp người phụ trách thanh toán, lấy cam kết ngày trả.'},
+  low: {t:'Quá hạn (1–30 ngày)', r:3, act:'Gửi email/nhắc nhở thanh toán, đối chiếu công nợ.'},
+  soon:{t:'Sắp đến hạn', r:2},
+  nodue:{t:'Chưa có hạn TT', r:1.5},
+  ok:  {t:'Trong hạn', r:1},
+  credit:{t:'Trả trước / dư có', r:0.5},
+  paid:{t:'Đã thu hết', r:0},
+};
+const badge = lv => `<span class="badge lv-${lv}">${esc(LV[lv].t)}</span>`;
+function invStatus(x){
+  if (x.remain <= 0.5) return x.remain < -0.5 ? 'credit' : 'paid';
+  if (x.due == null) return 'nodue';
+  if (x.over > 0) return x.over > 90 ? 'crit' : x.over > 60 ? 'high' : x.over > 30 ? 'med' : 'low';
+  return -x.over <= S.soon ? 'soon' : 'ok';
+}
+function analyze(){
+  const ref = S.ref, list = S.data.invoices;
+  const byC = new Map();
+  for (const x of list){
+    x.over = x.due == null ? null : ref - x.due; // >0 quá hạn, <=0 còn (-over) ngày tới hạn
+    x.st = invStatus(x);
+    let c = byC.get(x.code);
+    if (!c) byC.set(x.code, c = {code:x.code, name:x.name, opening:0, value:0, paid:0, remain:0, overdue:0, b:[0,0,0,0], soon:0, due30:0, nodue:0, notdue:0, maxOver:0, nOpen:0, nOver:0, nextDue:null, invs:[]});
+    c.invs.push(x); c.opening += x.opening; c.value += x.value; c.paid += x.paid; c.remain += x.remain;
+    if (x.remain > 0.5){
+      c.nOpen++;
+      if (x.due == null) c.nodue += x.remain;
+      else if (x.over > 0){ c.overdue += x.remain; c.nOver++; c.maxOver = Math.max(c.maxOver, x.over); c.b[x.over > 90 ? 3 : x.over > 60 ? 2 : x.over > 30 ? 1 : 0] += x.remain; }
+      else { c.notdue += x.remain; if (-x.over <= S.soon) c.soon += x.remain; if (-x.over <= 30) c.due30 += x.remain; if (c.nextDue == null || x.due < c.nextDue) c.nextDue = x.due; }
+    }
+  }
+  for (const c of byC.values()){
+    c.lv = c.maxOver > 90 ? 'crit' : c.maxOver > 60 ? 'high' : c.maxOver > 30 ? 'med' : c.maxOver > 0 ? 'low'
+         : c.soon > 0 ? 'soon' : c.remain > 0.5 ? (c.notdue > 0 ? 'ok' : 'nodue') : c.remain < -0.5 ? 'credit' : 'paid';
+  }
+  S.cust = [...byC.values()];
+}
+
+/* ---------- render ---------- */
+function render(){
+  analyze();
+  renderOverview(); renderAlerts(); renderForecast(); renderCustomers(); renderInvoices();
+}
+function totals(){
+  const t = {value:0, paid:0, remain:0, overdue:0, soon:0, due30:0, nodue:0, notdue:0, opening:0, b:[0,0,0,0], nDebt:0, nOverC:0, nOverI:0};
+  for (const c of S.cust){
+    t.value += c.value; t.paid += c.paid; t.remain += c.remain; t.opening += c.opening; t.overdue += c.overdue; t.soon += c.soon; t.due30 += c.due30; t.nodue += c.nodue; t.notdue += c.notdue;
+    c.b.forEach((v,i) => t.b[i] += v);
+    if (c.remain > 0.5) t.nDebt++; if (c.overdue > 0) t.nOverC++; t.nOverI += c.nOver;
+  }
+  return t;
+}
+function renderOverview(){
+  const t = totals(); S.tot = t;
+  $('#kpis').innerHTML = [
+    ['Còn phải thu', fmtC(t.remain), `${fmt(t.remain)} đ · ${t.nDebt} khách hàng`, ''],
+    ['Nợ quá hạn', fmtC(t.overdue), `${pct(t.overdue, t.remain)} dư nợ · ${t.nOverC} KH · ${t.nOverI} HĐ`, t.overdue > 0 ? 'alert' : ''],
+    [`Đến hạn ≤ ${S.soon} ngày`, fmtC(t.soon), `${pct(t.soon, t.remain)} dư nợ`, t.soon > 0 ? 'soon' : ''],
+    ['Dự kiến thu 30 ngày tới', fmtC(t.due30), 'theo hạn thanh toán (chưa gồm nợ quá hạn)', ''],
+    ['Tỷ lệ đã thu', pct(t.paid, t.value), `Đã thu ${fmtC(t.paid)} / ${fmtC(t.value)}`, ''],
+  ].map(([l,v,n,cls]) => `<div class="card kpi ${cls}"><div class="lbl">${l}</div><div class="val">${v}</div><div class="note">${n}</div></div>`).join('');
+
+  const nInv = (f) => S.data.invoices.filter(x => x.remain > 0.5 && f(x)).length;
+  const buckets = [
+    ['Quá hạn > 90 ngày', t.b[3], 'var(--severe)', nInv(x => x.over > 90)],
+    ['Quá hạn 61–90 ngày', t.b[2], 'var(--critical)', nInv(x => x.over > 60 && x.over <= 90)],
+    ['Quá hạn 31–60 ngày', t.b[1], 'var(--serious)', nInv(x => x.over > 30 && x.over <= 60)],
+    ['Quá hạn 1–30 ngày', t.b[0], 'var(--warning)', nInv(x => x.over > 0 && x.over <= 30)],
+    ['Đến hạn 0–7 ngày', 0, 'var(--b550)', 0, x => -x.over <= 7],
+    ['Đến hạn 8–30 ngày', 0, 'var(--b450)', 0, x => -x.over > 7 && -x.over <= 30],
+    ['Đến hạn 31–60 ngày', 0, 'var(--b350)', 0, x => -x.over > 30 && -x.over <= 60],
+    ['Đến hạn > 60 ngày', 0, 'var(--b250)', 0, x => -x.over > 60],
+    ['Chưa có hạn TT', t.nodue, 'var(--nodue)', nInv(x => x.due == null)],
+  ];
+  for (const b of buckets) if (b[4]) { const xs = S.data.invoices.filter(x => x.remain > 0.5 && x.due != null && x.over <= 0 && b[4](x)); b[1] = xs.reduce((s,x) => s + x.remain, 0); b[3] = xs.length; }
+  const mx = Math.max(...buckets.map(b => b[1]), 1);
+  $('#agingChart').innerHTML = buckets.map(([n,v,col,k]) =>
+    `<div class="hbar" data-tip="${esc(n)}\n${fmt(v)} đ\n${k} hóa đơn · ${pct(v, t.remain)} dư nợ"><div class="name">${n}</div><div class="track"><div class="seg" style="width:${v/mx*100}%;background:${col}"></div></div><div class="num">${fmtC(v)} <small>${v ? pct(v,t.remain) : ''}</small></div></div>`).join('');
+
+  const top = [...S.cust].filter(c => c.remain > 0.5).sort((a,b) => b.remain - a.remain).slice(0,10);
+  const mt = Math.max(...top.map(c => c.remain), 1);
+  $('#topChart').innerHTML = top.map(c => {
+    const segs = [[c.overdue,'var(--critical)','Quá hạn'],[c.notdue,'var(--b450)','Trong hạn'],[c.nodue,'var(--nodue)','Chưa có hạn']].filter(s => s[0] > 0);
+    return `<div class="hbar" style="grid-template-columns:minmax(120px,260px) 1fr 110px" data-tip="${esc(c.name)}\nCòn phải thu: ${fmt(c.remain)} đ\nQuá hạn: ${fmt(c.overdue)} đ\nTrong hạn: ${fmt(c.notdue)} đ${c.nodue ? '\nChưa có hạn: ' + fmt(c.nodue) + ' đ' : ''}"><div class="name">${esc(c.name)}</div><div class="track">${segs.map(s => `<div class="seg" style="width:${s[0]/mt*100}%;background:${s[1]}"></div>`).join('')}</div><div class="num">${fmtC(c.remain)}</div></div>`;
+  }).join('') || '<p class="muted">Không còn khách hàng nào còn nợ.</p>';
+
+  const ins = [];
+  const debt = [...S.cust].filter(c => c.remain > 0.5).sort((a,b) => b.remain - a.remain);
+  if (debt.length >= 3){ const s3 = debt.slice(0,3).reduce((s,c) => s + c.remain, 0); ins.push(`<b>${pct(s3, t.remain)}</b> dư nợ tập trung ở 3 khách hàng lớn nhất: ${debt.slice(0,3).map(c => esc(c.name)).join('; ')}.`); }
+  if (t.overdue > 0){
+    const worst = [...S.cust].filter(c => c.overdue > 0).sort((a,b) => b.overdue - a.overdue)[0];
+    ins.push(`<span class="red">${fmtC(t.overdue)}</span> đã quá hạn (${t.nOverI} hóa đơn, ${t.nOverC} khách hàng); lớn nhất là <b>${esc(worst.name)}</b> với ${fmtC(worst.overdue)}.`);
+    const old = S.cust.filter(c => c.maxOver > 90);
+    if (old.length) ins.push(`<span class="red">${old.length} khách hàng</span> có hóa đơn quá hạn trên 90 ngày (tổng ${fmtC(t.b[3])}) – rủi ro khó đòi cao.`);
+  } else ins.push('Không có khoản nợ nào quá hạn tại ngày đánh giá. ✓');
+  ins.push(`<b>${fmtC(t.soon)}</b> sẽ đến hạn trong ${S.soon} ngày tới; <b>${fmtC(t.due30)}</b> đến hạn trong 30 ngày tới.`);
+  const nd = S.cust.filter(c => c.nodue > 0);
+  if (nd.length) ins.push(`${nd.length} khách hàng còn ${fmtC(t.nodue)} chưa có hạn thanh toán – cần bổ sung điều khoản/ngày đến hạn: ${nd.slice(0,3).map(c => esc(c.name)).join('; ')}${nd.length > 3 ? '…' : ''}.`);
+  ins.push(`Kỳ này đã thu ${fmtC(t.paid)} trên tổng giá trị hóa đơn ${fmtC(t.value)} (tỷ lệ thu ${pct(t.paid, t.value)}).`);
+  $('#insights').innerHTML = ins.map(s => `<li>${s}</li>`).join('');
+}
+
+function invTable(xs, cols){
+  const C = {
+    name:['Khách hàng', x => esc(x.name)],
+    inv:['Số HĐ', x => esc(x.inv || x.doc)],
+    date:['Ngày HT', x => dstr(x.date)],
+    due:['Hạn TT', x => x.due == null ? '<span class="muted">—</span>' : dstr(x.due)],
+    value:['Giá trị HĐ', x => fmt(x.value), 1],
+    paid:['Đã thu', x => fmt(x.paid), 1],
+    remain:['Còn phải thu', x => fmt(x.remain), 1],
+    over:['Quá hạn / còn', x => x.over == null || x.remain <= 0.5 ? '' : x.over > 0 ? `<span class="red">${x.over} ngày</span>` : (x.over === 0 ? 'Đến hạn hôm nay' : `còn ${-x.over} ngày`), 1],
+    st:['Tình trạng', x => badge(x.st)],
+  };
+  return `<table><thead><tr>${cols.map(k => `<th class="${C[k][2] ? 'n' : ''}">${C[k][0]}</th>`).join('')}</tr></thead><tbody>${
+    xs.map(x => `<tr>${cols.map(k => `<td class="${C[k][2] ? 'n' : ''}">${C[k][1](x)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+
+function renderAlerts(){
+  const od = S.cust.filter(c => c.overdue > 0).sort((a,b) => LV[b.lv].r - LV[a.lv].r || b.overdue - a.overdue);
+  $('#alertCnt').textContent = od.length;
+  $('#alertCnt').classList.toggle('hidden', !od.length);
+  const t = S.tot;
+  $('#alertSummary').innerHTML = od.length
+    ? `Tại ngày <b>${dstr(S.ref)}</b> có <b class="red">${od.length} khách hàng</b> nợ quá hạn, tổng <b class="red">${fmt(t.overdue)} đ</b> (${pct(t.overdue, t.remain)} dư nợ). Sắp xếp theo mức độ nghiêm trọng.`
+    : `Tại ngày <b>${dstr(S.ref)}</b> không có khách hàng nào nợ quá hạn. ✓`;
+  $('#alertCards').innerHTML = od.map(c => {
+    const oldest = c.invs.filter(x => x.remain > 0.5 && x.over > 0).sort((a,b) => b.over - a.over)[0];
+    return `<div class="card acard ${c.lv}">
+      ${badge(c.lv)}
+      <h3>${esc(c.name)}${c.code !== c.name ? ` <span class="muted" style="font-weight:400">· ${esc(c.code)}</span>` : ''}</h3>
+      <div class="big">${fmt(c.overdue)} đ</div>
+      <dl>
+        <dt>Tổng còn phải thu</dt><dd>${fmt(c.remain)} đ</dd>
+        <dt>Tỷ lệ quá hạn / dư nợ</dt><dd>${pct(c.overdue, c.remain)}</dd>
+        <dt>Số HĐ quá hạn</dt><dd>${c.nOver} / ${c.nOpen}</dd>
+        <dt>Quá hạn lâu nhất</dt><dd class="red">${c.maxOver} ngày</dd>
+        <dt>HĐ cũ nhất</dt><dd>${esc(oldest.inv || oldest.doc)} · hạn ${dstr(oldest.due)}</dd>
+        ${c.b.map((v,i) => v ? `<dt>${['1–30','31–60','61–90','>90'][i]} ngày</dt><dd>${fmt(v)}</dd>` : '').join('')}
+      </dl>
+      <div class="act"><b>Đề xuất:</b> ${LV[c.lv].act}</div>
+    </div>`;
+  }).join('');
+
+  const soon = S.data.invoices.filter(x => x.st === 'soon').sort((a,b) => a.due - b.due);
+  $('#soonTitle').textContent = `Sắp đến hạn trong ${S.soon} ngày tới (${soon.length} HĐ · ${fmt(soon.reduce((s,x) => s + x.remain, 0))} đ)`;
+  $('#soonTbl').innerHTML = soon.length ? `<div class="tblwrap">${invTable(soon, ['name','inv','due','over','remain'])}</div>` : '<p class="muted">Không có hóa đơn nào sắp đến hạn.</p>';
+  const nd = S.data.invoices.filter(x => x.st === 'nodue');
+  $('#nodueTbl').innerHTML = nd.length ? `<div class="tblwrap">${invTable(nd, ['name','inv','date','remain'])}</div>` : '<p class="muted">Tất cả hóa đơn còn nợ đều có hạn thanh toán. ✓</p>';
+}
+
+function periods(){
+  const ref = S.ref, ps = [];
+  if (S.fcMode === 'week'){
+    const mon = ref - ((ref + 3) % 7);
+    for (let i = 0; i < 12; i++){ const a = mon + 7*i, b = a + 6; ps.push({a: Math.max(a, ref), b, lbl: i === 0 ? 'Tuần này' : dshort(a), full: `Tuần ${dshort(a)} – ${dstr(b)}`}); }
+  } else {
+    const d = new Date(ref*DAY);
+    for (let i = 0; i < 6; i++){
+      const y = d.getUTCFullYear(), m = d.getUTCMonth() + i;
+      const a = Math.floor(Date.UTC(y, m, 1)/DAY), b = Math.floor(Date.UTC(y, m+1, 0)/DAY);
+      const dt = new Date(a*DAY); const lbl = `T${dt.getUTCMonth()+1}/${dt.getUTCFullYear()}`;
+      ps.push({a: Math.max(a, ref), b, lbl, full: (i === 0 ? 'Còn lại tháng ' : 'Tháng ') + (dt.getUTCMonth()+1) + '/' + dt.getUTCFullYear()});
+    }
+  }
+  return ps;
+}
+function renderForecast(){
+  const open = S.data.invoices.filter(x => x.remain > 0.5);
+  const ps = periods(), last = ps[ps.length-1].b;
+  const rows = [
+    {lbl:'Quá hạn', full:'Đã quá hạn – cần thu ngay', col:'var(--critical)', xs: open.filter(x => x.due != null && x.over > 0)},
+    ...ps.map(p => ({lbl:p.lbl, full:p.full, col:'var(--b450)', xs: open.filter(x => x.due != null && x.over <= 0 && x.due >= p.a && x.due <= p.b)})),
+    {lbl:'Sau đó', full:`Sau ${dstr(last)}`, col:'var(--b250)', xs: open.filter(x => x.due != null && x.due > last)},
+    {lbl:'Chưa có hạn', full:'Chưa có hạn thanh toán', col:'var(--nodue)', xs: open.filter(x => x.due == null)},
+  ];
+  rows.forEach(r => { r.v = r.xs.reduce((s,x) => s + x.remain, 0); });
+  const mx = Math.max(...rows.map(r => r.v), 1);
+  $('#fcChart').innerHTML = `<div class="vchart">${rows.map(r =>
+    `<div class="vcol" data-tip="${esc(r.full)}\n${fmt(r.v)} đ\n${r.xs.length} hóa đơn · ${new Set(r.xs.map(x => x.code)).size} khách hàng"><div class="v">${r.v ? fmtC(r.v) : ''}</div><div class="bar" style="height:${r.v/mx*100}%;background:${r.col}"></div></div>`).join('')}</div>
+    <div class="vlabels">${rows.map(r => `<div title="${esc(r.full)}">${esc(r.lbl)}</div>`).join('')}</div>`;
+  let cum = 0;
+  $('#fcTbl').innerHTML = `<div class="tblwrap"><table><thead><tr><th>Kỳ</th><th class="n">Số HĐ</th><th class="n">Số KH</th><th class="n">Dự kiến thu</th><th class="n">Lũy kế</th></tr></thead><tbody>${
+    rows.map((r,i) => { cum += r.v; if (!r.xs.length) return `<tr><td>${esc(r.full)}</td><td class="n muted">0</td><td class="n muted">0</td><td class="n muted">0</td><td class="n">${fmt(cum)}</td></tr>`;
+      const byC = {}; r.xs.forEach(x => { (byC[x.code] ||= {name:x.name, v:0, xs:[]}); byC[x.code].v += x.remain; byC[x.code].xs.push(x); });
+      const cs = Object.values(byC).sort((a,b) => b.v - a.v);
+      return `<tr class="clk" data-fc="${i}"><td>▸ ${esc(r.full)}</td><td class="n">${r.xs.length}</td><td class="n">${cs.length}</td><td class="n ${i === 0 ? 'red' : ''}"><b>${fmt(r.v)}</b></td><td class="n">${fmt(cum)}</td></tr>
+        <tr class="sub hidden" data-fcsub="${i}"><td colspan="5">${invTable(r.xs.sort((a,b) => (a.due ?? 1e9) - (b.due ?? 1e9) || b.remain - a.remain), ['name','inv','due','over','remain'])}</td></tr>`; }).join('')
+  }</tbody><tfoot><tr><td>Tổng</td><td class="n">${open.length}</td><td class="n"></td><td class="n">${fmt(cum)}</td><td></td></tr></tfoot></table></div>`;
+}
+
+function sortBy(arr, s){ return arr.sort((a,b) => { const x = a[s.k], y = b[s.k]; return (typeof x === 'string' ? x.localeCompare(y, 'vi') : (x ?? -1e15) - (y ?? -1e15)) * s.dir; }); }
+function th(label, k, s, n){ return `<th class="sortable ${n ? 'n' : ''}" data-sort="${k}">${label}${s.k === k ? (s.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`; }
+
+function renderCustomers(){
+  const q = norm($('#custSearch').value), f = $('#custFilter').value, s = S.custSort;
+  let xs = S.cust.filter(c => (!q || norm(c.name + ' ' + c.code).includes(q)) &&
+    (f === 'all' || (f === 'debt' && c.remain > 0.5) || (f === 'overdue' && c.overdue > 0) || (f === 'soon' && c.soon > 0)));
+  xs.forEach(c => c.lvr = LV[c.lv].r);
+  sortBy(xs, s.k === 'lv' ? {k:'lvr', dir:s.dir} : s);
+  const sum = k => xs.reduce((a,c) => a + c[k], 0);
+  $('#custTbl').innerHTML = `<table><thead><tr>${th('Mã KH','code',s)}${th('Tên khách hàng','name',s)}${th('Nợ đầu kỳ','opening',s,1)}${th('Giá trị HĐ','value',s,1)}${th('Đã thu','paid',s,1)}${th('Còn phải thu','remain',s,1)}${th('Quá hạn','overdue',s,1)}${th('Đến hạn ≤30 ngày','due30',s,1)}${th('Hạn gần nhất','nextDue',s,1)}${th('Quá hạn lâu nhất','maxOver',s,1)}${th('Tình trạng','lv',s)}</tr></thead><tbody>${
+    xs.map(c => `<tr class="clk" data-c="${esc(c.code)}"><td>${S.open.has(c.code) ? '▾' : '▸'} ${c.code === c.name ? '—' : esc(c.code)}</td><td>${esc(c.name)}</td><td class="n">${fmt(c.opening)}</td><td class="n">${fmt(c.value)}</td><td class="n">${fmt(c.paid)}</td><td class="n"><b>${fmt(c.remain)}</b></td><td class="n ${c.overdue > 0 ? 'red' : ''}">${fmt(c.overdue)}</td><td class="n">${fmt(c.due30)}</td><td class="n">${dstr(c.nextDue)}</td><td class="n ${c.maxOver ? 'red' : ''}">${c.maxOver ? c.maxOver + ' ngày' : ''}</td><td>${badge(c.lv)}</td></tr>` +
+      (S.open.has(c.code) ? `<tr class="sub"><td colspan="11">${invTable([...c.invs].sort((a,b) => (a.due ?? 1e9) - (b.due ?? 1e9)), ['inv','date','due','value','paid','remain','over','st'])}</td></tr>` : '')).join('')
+  }</tbody><tfoot><tr><td colspan="2">Tổng (${xs.length} KH)</td><td class="n">${fmt(sum('opening'))}</td><td class="n">${fmt(sum('value'))}</td><td class="n">${fmt(sum('paid'))}</td><td class="n">${fmt(sum('remain'))}</td><td class="n">${fmt(sum('overdue'))}</td><td class="n">${fmt(sum('due30'))}</td><td colspan="3"></td></tr></tfoot></table>`;
+}
+
+function renderInvoices(){
+  const q = norm($('#invSearch').value), f = $('#invFilter').value, s = S.invSort;
+  const OK = {open: x => x.remain > 0.5, overdue: x => x.remain > 0.5 && x.over > 0, soon: x => x.st === 'soon', notdue: x => x.st === 'ok' || x.st === 'soon', nodue: x => x.st === 'nodue', paid: x => x.st === 'paid' || x.st === 'credit', all: () => true}[f];
+  let xs = S.data.invoices.filter(x => OK(x) && (!q || norm(x.name + ' ' + x.code + ' ' + x.inv + ' ' + x.doc).includes(q)));
+  sortBy(xs, s);
+  const sum = k => xs.reduce((a,x) => a + x[k], 0);
+  $('#invTbl').innerHTML = `<table><thead><tr>${th('Khách hàng','name',s)}${th('Số HĐ','inv',s)}${th('Ngày HT','date',s)}${th('Hạn TT','due',s)}${th('Giá trị HĐ','value',s,1)}${th('Đã thu','paid',s,1)}${th('Còn phải thu','remain',s,1)}${th('Quá hạn / còn','over',s,1)}<th>Tình trạng</th></tr></thead><tbody>${
+    xs.map(x => `<tr><td>${esc(x.name)}</td><td>${esc(x.inv || x.doc)}</td><td>${dstr(x.date)}</td><td>${x.due == null ? '—' : dstr(x.due)}</td><td class="n">${fmt(x.value)}</td><td class="n">${fmt(x.paid)}</td><td class="n"><b>${fmt(x.remain)}</b></td><td class="n">${x.over == null || x.remain <= 0.5 ? '' : x.over > 0 ? `<span class="red">${x.over} ngày</span>` : x.over === 0 ? 'Hôm nay' : `còn ${-x.over} ngày`}</td><td>${badge(x.st)}</td></tr>`).join('')
+  }</tbody><tfoot><tr><td colspan="4">Tổng (${xs.length} HĐ)</td><td class="n">${fmt(sum('value'))}</td><td class="n">${fmt(sum('paid'))}</td><td class="n">${fmt(sum('remain'))}</td><td colspan="2"></td></tr></tfoot></table>`;
+}
+
+/* ---------- export ---------- */
+function exportXlsx(){
+  const wb = XLSX.utils.book_new(), ref = dstr(S.ref);
+  const add = (name, rows) => { const ws = XLSX.utils.json_to_sheet(rows); ws['!cols'] = Object.keys(rows[0] || {}).map(k => ({wch: Math.max(12, Math.min(45, k.length + 2))})); XLSX.utils.book_append_sheet(wb, ws, name); };
+  const cs = [...S.cust].sort((a,b) => b.remain - a.remain);
+  add('Tong hop KH', cs.map(c => ({'Mã KH':c.code,'Tên khách hàng':c.name,'Nợ đầu kỳ':c.opening,'Giá trị HĐ':c.value,'Đã thu':c.paid,'Còn phải thu':c.remain,'Quá hạn':c.overdue,'QH 1-30':c.b[0],'QH 31-60':c.b[1],'QH 61-90':c.b[2],'QH >90':c.b[3],[`Đến hạn ≤${S.soon} ngày`]:c.soon,'Đến hạn ≤30 ngày':c.due30,'Chưa có hạn TT':c.nodue,'Quá hạn lâu nhất (ngày)':c.maxOver,'Tình trạng':LV[c.lv].t})));
+  const od = S.cust.filter(c => c.overdue > 0).sort((a,b) => LV[b.lv].r - LV[a.lv].r || b.overdue - a.overdue);
+  add('Canh bao qua han', od.length ? od.map(c => ({'Mức độ':LV[c.lv].t,'Mã KH':c.code,'Tên khách hàng':c.name,'Nợ quá hạn':c.overdue,'Còn phải thu':c.remain,'Số HĐ quá hạn':c.nOver,'Quá hạn lâu nhất (ngày)':c.maxOver,'Đề xuất xử lý':LV[c.lv].act})) : [{'Thông báo':'Không có nợ quá hạn tại ' + ref}]);
+  const open = S.data.invoices.filter(x => x.remain > 0.5);
+  add('Du kien thu', [{'Kỳ':'Đã quá hạn','Dự kiến thu':open.filter(x => x.over > 0).reduce((s,x) => s + x.remain, 0)},
+    ...periods().map(p => ({'Kỳ':p.full,'Dự kiến thu':open.filter(x => x.due != null && x.over <= 0 && x.due >= p.a && x.due <= p.b).reduce((s,x) => s + x.remain, 0)}))]);
+  add('Chi tiet HD', S.data.invoices.map(x => ({'Mã KH':x.code,'Tên khách hàng':x.name,'Ngày HT':dstr(x.date),'Số CT':x.doc,'Số HĐ':x.inv,'Hạn TT':dstr(x.due),'Giá trị HĐ':x.value,'Đã thu':x.paid,'Còn phải thu':x.remain,'Số ngày quá hạn':x.remain > 0.5 && x.over > 0 ? x.over : '','Tình trạng':LV[x.st].t})));
+  XLSX.writeFile(wb, `Phan tich cong no_${isoOf(S.ref)}.xlsx`);
+}
+
+/* ---------- wiring ---------- */
+function loadFile(file){
+  $('#err').classList.add('hidden');
+  if (typeof XLSX === 'undefined') return showErr('Không tải được thư viện đọc Excel (cần kết nối Internet lần đầu mở trang).');
+  const rd = new FileReader();
+  rd.onload = e => {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      S.data = parseWorkbook(wb); S.open.clear();
+      const p = S.data.period;
+      $('#fileinfo').innerHTML = `<b>${esc(file.name)}</b> · sheet “${esc(S.data.sheet)}” · ${S.data.invoices.length} dòng hóa đơn${p ? ' · ' + esc(p.label || ('kỳ đến ' + dstr(p.end))) : ''}`;
+      const bp = $('#btnPeriodEnd');
+      if (p && p.end) { bp.textContent = 'Cuối kỳ báo cáo (' + dstr(p.end) + ')'; bp.classList.remove('hidden'); } else bp.classList.add('hidden');
+      ['#app','#btnNew','#btnExport','#btnPrint'].forEach(s => $(s).classList.remove('hidden'));
+      $('#upload').classList.add('hidden');
+      render();
+    } catch (ex) { showErr(ex.message || String(ex)); }
+  };
+  rd.readAsArrayBuffer(file);
+}
+function showErr(m){ const e = $('#err'); e.textContent = m; e.classList.remove('hidden'); }
+function setRef(day){ S.ref = day; $('#refDate').value = isoOf(day); if (S.data) render(); }
+
+const drop = $('#drop');
+drop.onclick = () => $('#file').click();
+drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') $('#file').click(); };
+$('#file').onchange = e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ''; };
+['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => { e.preventDefault(); if (e.dataTransfer.files[0] && !drop.contains(e.target)) loadFile(e.dataTransfer.files[0]); });
+
+$('#btnNew').onclick = () => { $('#upload').classList.remove('hidden'); $('#file').click(); };
+$('#btnExport').onclick = exportXlsx;
+$('#btnPrint').onclick = () => window.print();
+$('#btnToday').onclick = () => setRef(dayOf(new Date()));
+$('#btnPeriodEnd').onclick = () => setRef(S.data.period.end);
+$('#refDate').onchange = e => { const d = parseDay(e.target.value); if (d != null) setRef(d); };
+$('#soonDays').onchange = e => { S.soon = Math.max(1, +e.target.value || 7); render(); };
+$('#fcMode').onchange = e => { S.fcMode = e.target.value; renderForecast(); };
+$('#custSearch').oninput = renderCustomers; $('#custFilter').onchange = renderCustomers;
+$('#invSearch').oninput = renderInvoices; $('#invFilter').onchange = renderInvoices;
+$('#tabs').onclick = e => {
+  const b = e.target.closest('.tab'); if (!b) return;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === b));
+  document.querySelectorAll('.tabpane').forEach(p => p.classList.toggle('hidden', p.id !== 'pane-' + b.dataset.tab));
+};
+$('#custTbl').onclick = e => {
+  const h = e.target.closest('th[data-sort]');
+  if (h){ const k = h.dataset.sort; S.custSort = S.custSort.k === k ? {k, dir:-S.custSort.dir} : {k, dir: ['code','name'].includes(k) ? 1 : -1}; return renderCustomers(); }
+  const r = e.target.closest('tr[data-c]'); if (!r) return;
+  const c = r.dataset.c; S.open.has(c) ? S.open.delete(c) : S.open.add(c); renderCustomers();
+};
+$('#invTbl').onclick = e => {
+  const h = e.target.closest('th[data-sort]'); if (!h) return;
+  const k = h.dataset.sort; S.invSort = S.invSort.k === k ? {k, dir:-S.invSort.dir} : {k, dir: ['name','inv'].includes(k) ? 1 : -1}; renderInvoices();
+};
+$('#fcTbl').onclick = e => {
+  const r = e.target.closest('tr[data-fc]'); if (!r) return;
+  const sub = document.querySelector(`tr[data-fcsub="${r.dataset.fc}"]`); sub.classList.toggle('hidden');
+  r.cells[0].innerHTML = r.cells[0].innerHTML.replace(/^[▸▾]/, sub.classList.contains('hidden') ? '▸' : '▾');
+};
+// tooltip
+const tip = $('#tip');
+document.addEventListener('mousemove', e => {
+  const t = e.target.closest('[data-tip]');
+  if (!t) { tip.style.display = 'none'; return; }
+  tip.textContent = t.dataset.tip; tip.style.display = 'block';
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.min(e.clientX + 14, innerWidth - w - 8) + 'px';
+  tip.style.top = (e.clientY + 16 + h > innerHeight ? e.clientY - h - 10 : e.clientY + 16) + 'px';
+});
+$('#refDate').value = isoOf(S.ref);
+</script>
+</body>
+</html>
